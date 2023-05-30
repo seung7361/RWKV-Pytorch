@@ -9,8 +9,8 @@ class RWKVSelfAttention(torch.nn.Module):
 
         self.hidden_size = hidden_size
 
-        self.time_decay = torch.nn.Parameter(torch.ones(hidden_size))
-        self.time_first = torch.nn.Parameter(torch.ones(hidden_size))
+        self.time_decay = torch.nn.Parameter(torch.exp(-torch.ones(hidden_size)))
+        self.time_first = torch.nn.Parameter(torch.exp(-torch.ones(hidden_size)))
         self.time_shift = torch.nn.ZeroPad2d((0, 0, 1, -1)) # shifts data one step to the right
 
         self.time_mix_key = torch.nn.Parameter(torch.ones(1, 1, hidden_size))
@@ -44,7 +44,6 @@ class RWKVSelfAttention(torch.nn.Module):
         # initialization before the for loop
         num_state = torch.ones_like(key[:, 0])
         den_state = torch.ones_like(key[:, 0])
-        time_decay = torch.exp(self.time_decay)
 
         output = torch.zeros_like(x)
         # num_state shape == den_state shape == (batch_size, hidden_size)
@@ -54,17 +53,14 @@ class RWKVSelfAttention(torch.nn.Module):
             current_key = key[:, cur] # shape == (batch_size, hidden_size)
             current_value = value[:, cur] # shape == (batch_size, hidden_size)
 
-            output[:, cur] = ((num_state + time_decay * current_key * den_state) / (den_state + time_decay * current_key))
-            print(output[:, cur].isnan().sum())
-            print(current_key.isnan().sum())
-            print(current_value.isnan().sum())
+            output[:, cur] = ((num_state + self.time_decay * current_key * den_state) / (den_state + self.time_decay * current_key))
 
             # update num_state and den_state for the next loop
-            num_state = time_decay * num_state + torch.exp(current_key) * current_value
-            den_state = time_decay * den_state + torch.exp(current_key)
+            num_state = self.time_decay * num_state + torch.exp(current_key) * current_value
+            den_state = self.time_decay * den_state + torch.exp(current_key)
 
         output = self.ln_out(receptance * output)
-        print()
+
         return output
 
 class RWKVFeedForward(torch.nn.Module):
@@ -139,13 +135,3 @@ class RWKVModel(torch.nn.Module):
 
         return out
 
-model = RWKVModel(vocab_size=vocab_size, n_layers=3, hidden_size=2048)
-print("model parameters: {:_}".format(sum(p.numel() for p in model.parameters() if p.requires_grad)))
-print("model load complete.")
-
-sentence = "I am a student."
-token = tokenizer(sentence, return_tensors="pt").input_ids
-print(token, token.shape)
-
-output = model(token)
-print(output, output.shape)
