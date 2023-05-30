@@ -20,7 +20,7 @@ print('[PAD]', PAD_TOKEN_ID)
 
 ### hyperparameters
 
-n_layers = 4
+n_layers = 12
 hidden_size = 768
 learning_rate = 2e-4
 batch_size = 32
