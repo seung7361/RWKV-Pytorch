@@ -20,7 +20,7 @@ This project requires Python 3.x and PyTorch 1.x.
 
 1. Clone the repository.
 ```
-git clone https://github.com/yourusername/RMKV_Pytorch.git
+git clone https://github.com/seung7361/RMKV
 ```
 
 2. Navigate to the cloned directory:

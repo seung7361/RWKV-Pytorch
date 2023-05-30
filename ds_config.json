@@ -1,0 +1,42 @@
+{
+    "optimizer": {
+        "type": "AdamW",
+        "params": {
+          "lr": 0.001,
+          "betas": [
+            0.8,
+            0.999
+          ],
+          "eps": 1e-8,
+          "weight_decay": 3e-7
+        }
+    },
+    "fp16": {
+        "enabled": false,
+        "auto_cast": false,
+        "loss_scale": 0,
+        "initial_scale_power": 16,
+        "loss_scale_window": 1000,
+        "hysteresis": 2,
+        "consecutive_hysteresis": false,
+        "min_loss_scale": 1
+    },
+    "zero_optimization": {
+        "stage": 2,
+        "allgather_partitions": true,
+        "allgather_bucket_size": 5e8,
+        "overlap_comm": false,
+        "reduce_scatter": true,
+        "reduce_bucket_size": 5e8,
+        "contiguous_gradients" : true,
+        "stage3_max_live_parameters" : 1e9,
+        "stage3_max_reuse_distance" : 1e9,
+        "stage3_prefetch_bucket_size" : 5e8,
+        "stage3_param_persistence_threshold" : 1e6,
+        "sub_group_size" : 1e12
+    },
+    "train_batch_size": 32,
+    "gradient_accumulation_steps": 1,
+    "num_train_epochs": 1,
+    "train_micro_batch_size_per_gpu": 8
+}

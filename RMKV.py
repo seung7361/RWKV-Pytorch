@@ -1,6 +1,18 @@
 import numpy as np
 import torch
 
+from transformers import BertTokenizerFast, get_linear_schedule_with_warmup
+
+tokenizer = BertTokenizerFast.from_pretrained('bert-base-uncased', pad_token='[PAD]', eos_token='[EOS]', sos_token='[SOS]')
+vocab_size = tokenizer.vocab_size + 1
+
+SOS_TOKEN_ID = tokenizer.convert_tokens_to_ids('[SOS]')
+EOS_TOKEN_ID = tokenizer.convert_tokens_to_ids('[EOS]')
+PAD_TOKEN_ID = tokenizer.convert_tokens_to_ids('[PAD]')
+print('[SOS]', SOS_TOKEN_ID)
+print('[EOS]', EOS_TOKEN_ID)
+print('[PAD]', PAD_TOKEN_ID)
+
 class RWKVSelfAttention(torch.nn.Module):
     def __init__(self, hidden_size, layer_id):
         super().__init__()
@@ -10,7 +22,7 @@ class RWKVSelfAttention(torch.nn.Module):
         self.hidden_size = hidden_size
 
         self.time_decay = torch.nn.Parameter(torch.exp(-torch.ones(hidden_size)))
-        self.time_first = torch.nn.Parameter(torch.exp(-torch.ones(hidden_size)))
+        self.time_first = torch.nn.Parameter(torch.ones(hidden_size))
         self.time_shift = torch.nn.ZeroPad2d((0, 0, 1, -1)) # shifts data one step to the right
 
         self.time_mix_key = torch.nn.Parameter(torch.ones(1, 1, hidden_size))
@@ -45,22 +57,22 @@ class RWKVSelfAttention(torch.nn.Module):
         num_state = torch.ones_like(key[:, 0])
         den_state = torch.ones_like(key[:, 0])
 
-        output = torch.zeros_like(x)
+        output = torch.ones_like(x)
         # num_state shape == den_state shape == (batch_size, hidden_size)
 
         # calculate wkv_t
         for cur in range(seq_len):
-            current_key = key[:, cur] # shape == (batch_size, hidden_size)
-            current_value = value[:, cur] # shape == (batch_size, hidden_size)
+            current_key = key[:, cur, :] # shape == (batch_size, hidden_size)
+            current_value = value[:, cur, :] # shape == (batch_size, hidden_size)
 
             output[:, cur] = ((num_state + self.time_decay * current_key * den_state) / (den_state + self.time_decay * current_key))
 
             # update num_state and den_state for the next loop
             num_state = self.time_decay * num_state + torch.exp(current_key) * current_value
             den_state = self.time_decay * den_state + torch.exp(current_key)
+    
 
         output = self.ln_out(receptance * output)
-
         return output
 
 class RWKVFeedForward(torch.nn.Module):
@@ -122,16 +134,53 @@ class RWKVModel(torch.nn.Module):
         self.ln_in = torch.nn.LayerNorm(hidden_size)
         self.layers = torch.nn.ModuleList([RWKVBlock(layer_id=i, hidden_size=hidden_size) for i in range(n_layers)])
         self.ln_out = torch.nn.LayerNorm(hidden_size)
+
+        self.linear = torch.nn.Linear(hidden_size, vocab_size)
     
     def forward(self, input_ids):
         out = self.embedding(input_ids)
         out = self.ln_in(out)
         for idx, layer in enumerate(self.layers):
-
             out = layer(out)
 
         
         out = self.ln_out(out)
+        out = self.linear(out)
 
         return out
 
+    def generate(self, text, tokenizer, max_length=64, top_p=0.9):
+        input_ids = tokenizer(text, return_tensors='pt')['input_ids'].cuda()
+        
+        for i in range(max_length):
+            outputs = self(input_ids)
+            next_token_logits = outputs[0][-1, :]
+            
+            # top-p sampling
+            # apply a softmax to convert the logits to probabilities
+            probs = torch.nn.functional.softmax(next_token_logits, dim=-1)
+            
+            # sort the probabilities in descending order and compute their cumulative sum
+            sorted_probs, sorted_indices = torch.sort(probs, descending=True)
+            cumulative_probs = torch.cumsum(sorted_probs, dim=-1)
+            
+            # remove tokens with cumulative probability above the threshold
+            sorted_indices_to_remove = cumulative_probs > top_p
+            # shift the indices to the right to keep also the first token above the threshold
+            sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
+            sorted_indices_to_remove[..., 0] = 0
+            
+            # scatter sorted tensors to original indexing
+            indices_to_remove = sorted_indices_to_remove.scatter(dim=-1, index=sorted_indices, src=sorted_indices_to_remove)
+            next_token_logits[indices_to_remove] = float('-inf')
+            
+            # sample from the filtered distribution
+            next_token_id = torch.multinomial(torch.nn.functional.softmax(next_token_logits, dim=-1), num_samples=1).item()
+            
+            input_ids = torch.cat([input_ids, next_token_id.unsqueeze(0)], dim=-1)
+            
+            # stop when end-of-text token is generated
+            if next_token_id == tokenizer.eos_token_id or next_token_id == tokenizer.pad_token_id:
+                break
+        
+        return tokenizer.decode(input_ids[0])
