@@ -15,3 +15,4 @@ print('[EOS]', EOS_TOKEN_ID)
 print('[PAD]', PAD_TOKEN_ID)
 
 model = RWKVModel(vocab_size=vocab_size, n_layers=3, hidden_size=2048)
+
