@@ -30,6 +30,7 @@ num_warmup_steps = 1000
 num_training_steps = batch_size * num_epochs
 
 model = RWKVModel(vocab_size=vocab_size, n_layers=n_layers, hidden_size=hidden_size).cuda()
+
 print("model parameters: {:_}".format(sum(p.numel() for p in model.parameters())))
 print("model init done")
 
@@ -67,11 +68,8 @@ for epoch in range(num_epochs):
         input_ids, labels = batch[:, :-1].contiguous(), batch[:, 1:].contiguous()
         outputs = model_engine(input_ids)
 
-        print(outputs)
-
         loss = loss_fn(outputs.view(-1, vocab_size), labels.view(-1))
         
-        print(loss.item())
         model_engine.backward(loss)
         model_engine.step()
 
