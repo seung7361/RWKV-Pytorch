@@ -21,7 +21,7 @@ dataset = load_dataset("skeskinen/TinyStories-hf")
 
 # tokenize dataset
 
-train_dataset = [tokenizer(sentence, return_tensors='pt', padding='max_length', max_length=1024, truncation=True)['input_ids'].long().squeeze(0) for sentence in tqdm(dataset['train'][:1_000_000]['text'])]
+train_dataset = [tokenizer(sentence, return_tensors='pt', padding='max_length', max_length=1024, truncation=True)['input_ids'].long().squeeze(0) for sentence in tqdm(dataset['train'][:30_000]['text'])]
 val_dataset = [tokenizer(sentence, return_tensors='pt', padding='max_length', max_length=1024, truncation=True)['input_ids'].long().squeeze(0) for sentence in tqdm(dataset['validation'][:3000]['text'])]
 
 # save the tokenized dataset

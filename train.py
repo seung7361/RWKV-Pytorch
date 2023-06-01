@@ -1,4 +1,4 @@
-from RMKV import *
+from RWKV import *
 
 import numpy as np
 import torch
@@ -17,14 +17,13 @@ print('[SOS]', SOS_TOKEN_ID)
 print('[EOS]', EOS_TOKEN_ID)
 print('[PAD]', PAD_TOKEN_ID)
 
-
 ### hyperparameters
 
-n_layers = 12
+n_layers = 6
 hidden_size = 768
 learning_rate = 2e-4
 batch_size = 32
-num_epochs = 5
+num_epochs = 15
 
 num_warmup_steps = 1000
 num_training_steps = batch_size * num_epochs

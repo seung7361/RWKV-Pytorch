@@ -189,17 +189,17 @@ sentence = input()
 
 ### hyperparameters
 
-n_layers = 4
+n_layers = 6
 hidden_size = 768
 learning_rate = 2e-4
 batch_size = 32
-num_epochs = 5
+num_epochs = 15
 
 num_warmup_steps = 1000
 num_training_steps = batch_size * num_epochs
 
 model = RWKVModel(vocab_size=vocab_size, n_layers=n_layers, hidden_size=hidden_size).cuda()
-model.load_state_dict(torch.load('./checkpoint/model_epoch_1.pt'))
+model.load_state_dict(torch.load('./checkpoint/model_epoch_4.pt'))
 print('model load done')
 
 print(model.generate(sentence, tokenizer))

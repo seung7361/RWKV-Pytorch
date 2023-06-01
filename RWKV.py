@@ -1,11 +1,10 @@
 import numpy as np
 import torch
+from transformers import GPT2TokenizerFast
 
-from transformers import BertTokenizerFast, get_linear_schedule_with_warmup
-
-tokenizer = BertTokenizerFast.from_pretrained('bert-base-uncased', pad_token='[PAD]', eos_token='[EOS]', sos_token='[SOS]')
+tokenizer = GPT2TokenizerFast.from_pretrained('gpt2')
+tokenizer.add_special_tokens({'pad_token': '[PAD]'})
 vocab_size = tokenizer.vocab_size + 1
-
 SOS_TOKEN_ID = tokenizer.convert_tokens_to_ids('[SOS]')
 EOS_TOKEN_ID = tokenizer.convert_tokens_to_ids('[EOS]')
 PAD_TOKEN_ID = tokenizer.convert_tokens_to_ids('[PAD]')
@@ -21,7 +20,7 @@ class RWKVSelfAttention(torch.nn.Module):
 
         self.hidden_size = hidden_size
 
-        self.time_decay = torch.nn.Parameter(torch.exp(-torch.ones(hidden_size)))
+        self.time_decay = torch.nn.Parameter(torch.ones(hidden_size))
         self.time_first = torch.nn.Parameter(torch.ones(hidden_size))
         self.time_shift = torch.nn.ZeroPad2d((0, 0, 1, -1)) # shifts data one step to the right
 
@@ -43,9 +42,9 @@ class RWKVSelfAttention(torch.nn.Module):
         # shifted shape == x shape == (batch_size, seq_len, hidden_size)
 
 
-        key = x * self.time_mix_key + shifted * self.time_mix_key
-        value = x * self.time_mix_value + shifted * self.time_mix_value
-        receptance = self.receptance(x * self.time_mix_receptance + shifted * self.time_mix_receptance)
+        key = x * self.time_mix_key + shifted * (1 - self.time_mix_key)
+        value = x * self.time_mix_value + shifted * (1 - self.time_mix_value)
+        receptance = self.receptance(x * self.time_mix_receptance + shifted * (1 - self.time_mix_receptance))
 
         key = self.key( key )
         value = self.value( value )
@@ -54,22 +53,24 @@ class RWKVSelfAttention(torch.nn.Module):
         # key shape == value shape == receptance shape == (batch_size, seq_len, hidden_size)
 
         # initialization before the for loop
-        num_state = torch.ones_like(key[:, 0])
-        den_state = torch.ones_like(key[:, 0])
+        num_state = torch.zeros_like(key[:, 0])
+        den_state = torch.zeros_like(key[:, 0])
 
-        output = torch.ones_like(x)
+        output = torch.zeros_like(x)
         # num_state shape == den_state shape == (batch_size, hidden_size)
+        time_decay = torch.exp(-torch.exp(self.time_decay))
 
         # calculate wkv_t
         for cur in range(seq_len):
             current_key = key[:, cur, :] # shape == (batch_size, hidden_size)
             current_value = value[:, cur, :] # shape == (batch_size, hidden_size)
 
-            output[:, cur] = ((num_state + self.time_decay * current_key * den_state) / (den_state + self.time_decay * current_key))
+            output[:, cur] = (num_state + torch.exp(self.time_first + current_key) * current_value) \
+                              / (den_state + torch.exp(self.time_first + current_key))
 
             # update num_state and den_state for the next loop
-            num_state = self.time_decay * num_state + torch.exp(current_key) * current_value
-            den_state = self.time_decay * den_state + torch.exp(current_key)
+            num_state = time_decay * num_state + torch.exp(current_key) * current_value
+            den_state = time_decay * den_state + torch.exp(current_key)
     
 
         output = self.ln_out(receptance * output)
@@ -94,8 +95,8 @@ class RWKVFeedForward(torch.nn.Module):
     def forward(self, x):
         shifted = self.time_shift(x)
 
-        key = self.key( x * self.time_mix_key + shifted * self.time_mix_key )
-        receptance = self.sigmoid(self.receptance( x * self.time_mix_receptance + shifted * self.time_mix_receptance ))
+        key = self.key( x * self.time_mix_key + shifted * (1 - self.time_mix_key) )
+        receptance = self.sigmoid(self.receptance( x * self.time_mix_receptance + shifted * (1 - self.time_mix_receptance) ))
         value = self.value(key)
 
         return receptance * value
@@ -141,6 +142,7 @@ class RWKVModel(torch.nn.Module):
         out = self.embedding(input_ids)
         out = self.ln_in(out)
         for idx, layer in enumerate(self.layers):
+
             out = layer(out)
 
         
@@ -149,7 +151,7 @@ class RWKVModel(torch.nn.Module):
 
         return out
 
-    def generate(self, text, tokenizer, max_length=64, top_p=0.9):
+    def generate(self, text, max_length=64, top_p=0.9):
         input_ids = tokenizer(text, return_tensors='pt')['input_ids'].cuda()
         
         for i in range(max_length):
@@ -180,7 +182,7 @@ class RWKVModel(torch.nn.Module):
             input_ids = torch.cat([input_ids, next_token_id.unsqueeze(0)], dim=-1)
             
             # stop when end-of-text token is generated
-            if next_token_id == tokenizer.eos_token_id or next_token_id == tokenizer.pad_token_id:
+            if next_token_id == PAD_TOKEN_ID or next_token_id == EOS_TOKEN_ID:
                 break
         
         return tokenizer.decode(input_ids[0])
