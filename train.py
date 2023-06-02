@@ -73,6 +73,8 @@ for epoch in range(num_epochs):
         model_engine.step()
 
         pbar.set_description("loss: {:.4f}".format(loss.item()))
+    
+    print(model.generate('Once upon a time', tokenizer))
 
 ### save model
 

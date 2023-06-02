@@ -2,16 +2,6 @@ import numpy as np
 import torch
 from transformers import GPT2TokenizerFast
 
-tokenizer = GPT2TokenizerFast.from_pretrained('gpt2')
-tokenizer.add_special_tokens({'pad_token': '[PAD]'})
-vocab_size = tokenizer.vocab_size + 1
-SOS_TOKEN_ID = tokenizer.convert_tokens_to_ids('[SOS]')
-EOS_TOKEN_ID = tokenizer.convert_tokens_to_ids('[EOS]')
-PAD_TOKEN_ID = tokenizer.convert_tokens_to_ids('[PAD]')
-print('[SOS]', SOS_TOKEN_ID)
-print('[EOS]', EOS_TOKEN_ID)
-print('[PAD]', PAD_TOKEN_ID)
-
 class RWKVSelfAttention(torch.nn.Module):
     def __init__(self, hidden_size, layer_id):
         super().__init__()
@@ -125,11 +115,12 @@ class RWKVBlock(torch.nn.Module):
         return x
 
 class RWKVModel(torch.nn.Module):
-    def __init__(self, vocab_size, n_layers, hidden_size):
+    def __init__(self, vocab_size, n_layers, hidden_size, tokenizer):
         super().__init__()
 
         self.vocab_size = vocab_size
         self.n_layers = n_layers
+        self.tokenizer = tokenizer
 
         self.embedding = torch.nn.Embedding(vocab_size, hidden_size)
         self.ln_in = torch.nn.LayerNorm(hidden_size)
@@ -152,7 +143,7 @@ class RWKVModel(torch.nn.Module):
         return out
 
     def generate(self, text, max_length=64, top_p=0.9):
-        input_ids = tokenizer(text, return_tensors='pt')['input_ids'].cuda()
+        input_ids = self.tokenizer(text, return_tensors='pt')['input_ids'].cuda()
         
         for i in range(max_length):
             outputs = self(input_ids)
@@ -177,12 +168,12 @@ class RWKVModel(torch.nn.Module):
             next_token_logits[indices_to_remove] = float('-inf')
             
             # sample from the filtered distribution
-            next_token_id = torch.multinomial(torch.nn.functional.softmax(next_token_logits, dim=-1), num_samples=1).item()
+            next_token_id = torch.multinomial(torch.nn.functional.softmax(next_token_logits, dim=-1), num_samples=1).unsqueeze(0)
             
-            input_ids = torch.cat([input_ids, next_token_id.unsqueeze(0)], dim=-1)
+            input_ids = torch.cat([input_ids, next_token_id], dim=-1)
             
             # stop when end-of-text token is generated
-            if next_token_id == PAD_TOKEN_ID or next_token_id == EOS_TOKEN_ID:
+            if next_token_id == self.tokenizer.pad_token_id or next_token_id == self.tokenizer.eos_token_id:
                 break
         
-        return tokenizer.decode(input_ids[0])
+        return self.tokenizer.decode(input_ids[0])
