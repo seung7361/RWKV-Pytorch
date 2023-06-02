@@ -1,14 +1,14 @@
-from RWKV import *
+from RWKV import RWKVModel
 
 import numpy as np
 import torch
 
 from tqdm import tqdm
-from transformers import BertTokenizerFast, get_linear_schedule_with_warmup
+from transformers import GPT2TokenizerFast, get_linear_schedule_with_warmup
 import deepspeed
 
-tokenizer = BertTokenizerFast.from_pretrained('bert-base-uncased', pad_token='[PAD]', eos_token='[EOS]', sos_token='[SOS]')
-vocab_size = tokenizer.vocab_size + 1
+tokenizer = GPT2TokenizerFast.from_pretrained('bert-base-uncased', pad_token='[PAD]', eos_token='[EOS]', sos_token='[SOS]')
+vocab_size = tokenizer.vocab_size + 3
 
 SOS_TOKEN_ID = tokenizer.convert_tokens_to_ids('[SOS]')
 EOS_TOKEN_ID = tokenizer.convert_tokens_to_ids('[EOS]')
@@ -23,12 +23,13 @@ n_layers = 6
 hidden_size = 768
 learning_rate = 2e-4
 batch_size = 32
-num_epochs = 15
+num_epochs = 5
 
 num_warmup_steps = 1000
 num_training_steps = batch_size * num_epochs
 
-model = RWKVModel(vocab_size=vocab_size, n_layers=n_layers, hidden_size=hidden_size).cuda()
+model = RWKVModel(vocab_size=vocab_size, n_layers=n_layers,
+                  hidden_size=hidden_size, tokenizer=tokenizer).cuda()
 
 print("model parameters: {:_}".format(sum(p.numel() for p in model.parameters())))
 print("model init done")
@@ -56,7 +57,7 @@ for epoch in range(num_epochs):
     model_engine.train()
 
     # save checkpoint
-    torch.save(model.state_dict(), './checkpoint/model_epoch_{}.pt'.format(epoch))
+    torch.save(model.state_dict(), './checkpoint_g/model_epoch_{}.pt'.format(epoch))
     print('saving checkpoint complete.')
 
     pbar = tqdm(train_dataloader)
@@ -74,7 +75,7 @@ for epoch in range(num_epochs):
 
         pbar.set_description("loss: {:.4f}".format(loss.item()))
     
-    print(model.generate('Once upon a time', tokenizer))
+    print(model.generate('[SOS] Once upon a time', tokenizer))
 
 ### save model
 

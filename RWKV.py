@@ -1,6 +1,5 @@
 import numpy as np
 import torch
-from transformers import GPT2TokenizerFast
 
 class RWKVSelfAttention(torch.nn.Module):
     def __init__(self, hidden_size, layer_id):
@@ -80,6 +79,7 @@ class RWKVFeedForward(torch.nn.Module):
         self.value = torch.nn.Linear(hidden_size, hidden_size, bias=False)
         self.receptance = torch.nn.Linear(hidden_size, hidden_size, bias=False)
         
+        self.relu = torch.nn.ReLU()
         self.sigmoid = torch.nn.Sigmoid()
     
     def forward(self, x):
@@ -87,7 +87,7 @@ class RWKVFeedForward(torch.nn.Module):
 
         key = self.key( x * self.time_mix_key + shifted * (1 - self.time_mix_key) )
         receptance = self.sigmoid(self.receptance( x * self.time_mix_receptance + shifted * (1 - self.time_mix_receptance) ))
-        value = self.value(key)
+        value = self.value(self.relu(key)**2)
 
         return receptance * value
 

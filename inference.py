@@ -31,5 +31,5 @@ model = RWKVModel(vocab_size=vocab_size, n_layers=n_layers,
 model.load_state_dict(torch.load('./checkpoint/model_epoch_5.pt'))
 print('model load done')
 
-sentence = 'Once upon a time'
+sentence = '[SOS]'
 print(model.generate(sentence))
