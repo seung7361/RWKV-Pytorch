@@ -30,14 +30,13 @@ class RWKVSelfAttention(torch.nn.Module):
         _, seq_len, _ = x.shape
         # shifted shape == x shape == (batch_size, seq_len, hidden_size)
 
-
         key = x * self.time_mix_key + shifted * (1 - self.time_mix_key)
         value = x * self.time_mix_value + shifted * (1 - self.time_mix_value)
         receptance = self.receptance(x * self.time_mix_receptance + shifted * (1 - self.time_mix_receptance))
 
-        key = self.key( key )
-        value = self.value( value )
-        receptance = self.sigmoid( receptance )
+        key = torch.clamp(self.key(key), min=-60, max=30)
+        value = self.value(value)
+        receptance = self.sigmoid(receptance)
 
         # key shape == value shape == receptance shape == (batch_size, seq_len, hidden_size)
 
@@ -115,14 +114,17 @@ class RWKVBlock(torch.nn.Module):
         return x
 
 class RWKVModel(torch.nn.Module):
-    def __init__(self, vocab_size, n_layers, hidden_size, tokenizer):
+    def __init__(self, vocab_size, max_len, n_layers, hidden_size, tokenizer):
         super().__init__()
 
         self.vocab_size = vocab_size
+        self.max_len = max_len
         self.n_layers = n_layers
         self.tokenizer = tokenizer
 
         self.embedding = torch.nn.Embedding(vocab_size, hidden_size)
+        self.positional_emb = torch.nn.Embedding(max_len, hidden_size)
+
         self.ln_in = torch.nn.LayerNorm(hidden_size)
         self.layers = torch.nn.ModuleList([RWKVBlock(layer_id=i, hidden_size=hidden_size) for i in range(n_layers)])
         self.ln_out = torch.nn.LayerNorm(hidden_size)
@@ -130,10 +132,13 @@ class RWKVModel(torch.nn.Module):
         self.linear = torch.nn.Linear(hidden_size, vocab_size)
     
     def forward(self, input_ids):
+        B, T = input_ids.shape
         out = self.embedding(input_ids)
-        out = self.ln_in(out)
-        for idx, layer in enumerate(self.layers):
+        out += self.positional_emb(torch.arange(T).repeat(B, 1).to(out.device))
 
+        out = self.ln_in(out)
+
+        for layer in self.layers:
             out = layer(out)
 
         
