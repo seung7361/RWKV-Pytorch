@@ -47,7 +47,7 @@ class RWKVSelfAttention(torch.nn.Module):
 
         output = torch.zeros_like(x)
         # num_state shape == den_state shape == (batch_size, hidden_size)
-        time_decay = torch.exp(-torch.exp(self.time_decay))
+        time_decay = torch.exp(-self.time_decay)
 
         # calculate wkv_t
         for cur in range(seq_len):
