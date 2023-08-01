@@ -27,9 +27,5 @@ num_warmup_steps = 1000
 num_training_steps = batch_size * num_epochs
 
 model = RWKVModel(vocab_size=vocab_size, n_layers=n_layers,
-                  hidden_size=hidden_size, tokenizer=tokenizer).cuda()
-model.load_state_dict(torch.load('./checkpoint/model_epoch_5.pt'))
-print('model load done')
+                  hidden_size=hidden_size).cuda()
 
-sentence = '[SOS]'
-print(model.generate(sentence))

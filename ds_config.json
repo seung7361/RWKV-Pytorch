@@ -12,7 +12,7 @@
         }
     },
     "fp16": {
-        "enabled": false,
+        "enabled": true,
         "auto_cast": false,
         "loss_scale": 0,
         "initial_scale_power": 16,
@@ -22,7 +22,7 @@
         "min_loss_scale": 1
     },
     "zero_optimization": {
-        "stage": 2,
+        "stage": 3,
         "allgather_partitions": true,
         "allgather_bucket_size": 5e8,
         "overlap_comm": false,
@@ -35,8 +35,8 @@
         "stage3_param_persistence_threshold" : 1e6,
         "sub_group_size" : 1e12
     },
-    "train_batch_size": 32,
+    "train_batch_size": 4,
     "gradient_accumulation_steps": 1,
     "num_train_epochs": 1,
-    "train_micro_batch_size_per_gpu": 8
+    "train_micro_batch_size_per_gpu": 2
 }
