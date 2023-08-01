@@ -38,7 +38,7 @@ wikitext = load_dataset('wikitext', 'wikitext-103-v1')['train']['text']
 train_dataset = []
 for sentence in wikitext:
     if len(sentence) > 15:
-        train_dataset.append(sentence)
+        train_dataset.append("{} {} {}".format(tokenizer.eos_token, sentence, tokenizer.eos_token))
 
 model_engine, optimizer, train_dataloader, _ = deepspeed.initialize(model=model, optimizer=optimizer,
                                                     model_parameters=model.parameters(), config='ds_config.json',
@@ -58,6 +58,7 @@ for epoch in range(num_epochs):
     pbar.set_description("epoch: {}, loss: {:.4f}".format(epoch, 0.0))
     for batch in pbar:
         model_engine.zero_grad()
+        model_engine.train()
         
         batch = tokenizer(batch, padding='max_length', max_length=max_len,
                           truncation=True, return_tensors='pt').input_ids.cuda()
@@ -73,10 +74,18 @@ for epoch in range(num_epochs):
         pbar.set_description("epoch: {}, loss: {:.4f}".format(epoch, loss.item()))
 
         step += 1
-        if step % 100 == 0:
-            print(model.generate('<|endoftext|>', max_length=512))
+        if step % 10 == 0:
+            model_engine.eval()
+            sentence = "{}".format(tokenizer.eos_token)
+            token = tokenizer(sentence, return_tensors='pt')['input_ids'].cuda()
+            print(
+                tokenizer.decode(
+                    model.generate(token, max_len=64)[0].cpu().numpy(),
+                    skip_special_tokens=True
+                )
+            )
 
-        if step % 1000 == 0:
+        if step % 100 == 0:
             torch.save(model.state_dict(), 'checkpoint.pt')
             print('saving checkpoint complete.')
 

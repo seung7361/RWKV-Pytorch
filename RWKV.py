@@ -129,19 +129,34 @@ class RWKVLMHeadModel(torch.nn.Module):
         self.dim = dim
 
         self.model = RWKVModel(vocab_size, dim, n_layers)
-        self.lm_head = torch.nn.Linear(dim, vocab_size, bias=False)
+        self.lm_head = torch.nn.Linear(dim, vocab_size)
     
     def forward(self, x):
         x = self.model(x)
         return self.lm_head(x)
     
-    # generation with top-k sampling
-    def generate(self, x, k=10, p=0.9, max_len=100):
-        x = x[:, None]
-        for _ in range(max_len):
-            out = self.forward(x)
-            out = out[:, -1, :]
-            out = torch.topk(out, k=k, dim=-1)[0]
-            out = torch.multinomial(out, num_samples=1)
-            x = torch.cat((x, out), dim=-1)
+    # generation with top-p sampling
+    def generate(self, x, max_len, top_p=0.9):
+        for i in range(max_len):
+            x = self.forward(x)
+
+            x = torch.softmax(x, dim=-1)
+
+            probs = x[:, -1, :]
+            sorted_probs, sorted_indices = torch.sort(probs, descending=True, dim=-1)
+            cum_probs = torch.cumsum(sorted_probs, dim=-1)
+
+            sorted_indices_to_remove = cum_probs > top_p
+            sorted_indices_to_remove[:, 1:] = sorted_indices_to_remove[:, :-1].clone()
+            sorted_indices_to_remove[:, 0] = False
+
+            sorted_probs[sorted_indices_to_remove] = 0
+            sorted_probs = sorted_probs / sorted_probs.sum(dim=-1, keepdim=True)
+
+            next_token = torch.multinomial(sorted_probs, num_samples=1)
+            next_token = sorted_indices.gather(dim=-1, index=next_token)
+
+            x = torch.cat([x, torch.zeros(B, 1, V).to(x.device)], dim=1)
+            x[:, -1, next_token] = 1
+
         return x

@@ -1,6 +1,19 @@
 import torch
+from transformers import GPT2TokenizerFast
+from RWKV import RWKVLMHeadModel
 
-time_shift = torch.nn.ZeroPad2d((0, 0, 1, -1))
-x = torch.randint(low=0, high=10, size=(1, 5, 5))
-print(x)
-print(time_shift(x))
+tokenizer = GPT2TokenizerFast.from_pretrained("gpt2", pad_token='<|pad|>', eos_token='<|endoftext|>')
+sentence = "{}".format(tokenizer.eos_token)
+token = tokenizer(sentence, return_tensors='pt')['input_ids'].cuda()
+
+print(token.shape)
+
+model = RWKVLMHeadModel(50257, 1024, 12).cuda()
+model.eval()
+
+print(
+    tokenizer.decode(
+        model.generate(token, max_len=64)[0].cpu().numpy(),
+        skip_special_tokens=True
+    )
+)
